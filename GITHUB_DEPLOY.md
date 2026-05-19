@@ -18,6 +18,7 @@ main.py
 paths.py
 uninstall.py
 launcher.bat
+launcher.vbs
 build.iss
 requirements-base.txt
 requirements-cpu.txt

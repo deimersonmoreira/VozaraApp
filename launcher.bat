@@ -14,7 +14,7 @@ if exist "%VENV_PYTHONW%" (
 )
 
 if exist "%APP_PYTHONW%" (
-    "%APP_PYTHON%" "%~dp0main.py"
+    start "" "%APP_PYTHONW%" "%~dp0main.py"
     exit /b 0
 )
 

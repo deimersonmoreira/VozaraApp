@@ -1,6 +1,7 @@
 import ctypes
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -53,7 +54,14 @@ LGRAY = "#f5f5f5"
 def _run(cmd: list[str], timeout: int | None = None) -> tuple[bool, str]:
     logger.info("Executando: %s", " ".join(map(str, cmd)))
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            creationflags=creationflags,
+        )
         output = (result.stdout or "") + ("\n" + result.stderr if result.stderr else "")
         if result.returncode != 0:
             logger.error("Falha (%s): %s", result.returncode, output[-4000:])
@@ -509,7 +517,8 @@ class SetupWindow:
         self.root.after(1200, self._launch)
 
     def _launch(self):
-        subprocess.Popen([str(PYTHONW), str(BASE / "app.py")])
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        subprocess.Popen([str(PYTHONW), str(BASE / "app.py")], creationflags=creationflags)
         self.root.destroy()
 
     def run(self):
@@ -518,6 +527,7 @@ class SetupWindow:
 
 if __name__ == "__main__":
     if venv_installed():
-        subprocess.Popen([str(PYTHONW), str(BASE / "app.py")])
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        subprocess.Popen([str(PYTHONW), str(BASE / "app.py")], creationflags=creationflags)
     else:
         SetupWindow().run()

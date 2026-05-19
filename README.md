@@ -108,6 +108,7 @@ app.py                      Interface principal
 first_run.py                Assistente de primeira configuração
 uninstall.py                Limpeza no desinstalador
 launcher.bat                Atalho sem terminal
+launcher.vbs                Launcher invisível usado pelos atalhos do Windows
 build.iss                   Script Inno Setup
 requirements-base.txt       Dependências Python fixadas
 requirements-cpu.txt        PyTorch CPU fixado

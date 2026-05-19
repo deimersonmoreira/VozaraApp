@@ -37,6 +37,7 @@ Source: "main.py";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "paths.py";                 DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall.py";             DestDir: "{app}"; Flags: ignoreversion
 Source: "launcher.bat";             DestDir: "{app}"; Flags: ignoreversion
+Source: "launcher.vbs";             DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";                DestDir: "{app}"; Flags: ignoreversion
 Source: "BRANDING.md";              DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\*.svg";             DestDir: "{app}\assets"; Flags: ignoreversion
@@ -50,13 +51,14 @@ Source: "vendor\ffmpeg\bin\ffprobe.exe"; DestDir: "{app}\vendor\ffmpeg\bin"; Fla
 Source: "vendor\runtime\python\*"; DestDir: "{app}\runtime\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}";       Filename: "{app}\launcher.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
-Name: "{userdesktop}\{#AppName}"; Filename: "{app}\launcher.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
+Name: "{group}\{#AppName}";       Filename: "{sys}\wscript.exe"; Parameters: """{app}\launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
+Name: "{userdesktop}\{#AppName}"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
 
 [UninstallRun]
-Filename: "{cmd}"; \
-    Parameters: "/c if exist ""{localappdata}\{#AppDir}\.venv\Scripts\pythonw.exe"" (""{localappdata}\{#AppDir}\.venv\Scripts\pythonw.exe"" ""{app}\uninstall.py"") else if exist ""{app}\runtime\python\pythonw.exe"" (""{app}\runtime\python\pythonw.exe"" ""{app}\uninstall.py"")"; \
+Filename: "{app}\runtime\python\pythonw.exe"; \
+    Parameters: """{app}\uninstall.py"""; \
     Flags: waituntilterminated; \
+    Check: FileExists(ExpandConstant('{app}\runtime\python\pythonw.exe')); \
     RunOnceId: "RemoveDeps"
 
 [UninstallDelete]

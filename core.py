@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Callable
@@ -12,7 +13,8 @@ logger = logging.getLogger("transcrever")
 
 
 def _run_text(cmd: list[str], timeout: int = 10) -> str:
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=creationflags)
     if result.returncode != 0:
         return ""
     return result.stdout.strip()
