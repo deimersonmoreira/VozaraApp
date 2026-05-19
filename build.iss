@@ -31,6 +31,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 
 [Files]
 Source: "core.py";                  DestDir: "{app}"; Flags: ignoreversion
+Source: "hardware.py";              DestDir: "{app}"; Flags: ignoreversion
 Source: "app.py";                   DestDir: "{app}"; Flags: ignoreversion
 Source: "first_run.py";             DestDir: "{app}"; Flags: ignoreversion
 Source: "main.py";                  DestDir: "{app}"; Flags: ignoreversion

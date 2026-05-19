@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox
 
+from hardware import detect_gpu_info
 from paths import (
     BASE,
     BUNDLED_FFMPEG_BIN,
@@ -106,36 +107,8 @@ def get_ram_gb() -> int:
 
 
 def detect_gpu() -> tuple[str, str, int]:
-    ok, out = _run([
-        "nvidia-smi",
-        "--query-gpu=name,memory.total",
-        "--format=csv,noheader,nounits",
-    ], timeout=8)
-    if ok and out.strip():
-        parts = [p.strip() for p in out.strip().splitlines()[0].split(",")]
-        vram = 0
-        if len(parts) > 1:
-            try:
-                vram = int(float(parts[1]))
-            except ValueError:
-                vram = 0
-        return "nvidia", parts[0], vram
-
-    ok, out = _run(["wmic", "path", "win32_VideoController", "get", "name"], timeout=8)
-    if ok:
-        for line in out.splitlines():
-            name = line.strip()
-            if not name or name.lower() == "name":
-                continue
-            upper = name.upper()
-            if "NVIDIA" in upper:
-                return "nvidia", name, 0
-            if "AMD" in upper or "RADEON" in upper:
-                return "amd", name, 0
-            if "INTEL" in upper and ("ARC" in upper or "IRIS" in upper):
-                return "intel", name, 0
-
-    return "none", "Nenhuma GPU dedicada detectada", 0
+    info = detect_gpu_info()
+    return info["vendor"], info["name"], info["vram_mb"]
 
 
 def ffmpeg_available() -> bool:
@@ -173,6 +146,7 @@ class SetupWindow:
         self.gpu_vendor = "none"
         self.gpu_name = ""
         self.gpu_vram = 0
+        self.recommend_gpu = False
         self.install_failed = False
 
         self._build_chrome()
@@ -333,12 +307,22 @@ class SetupWindow:
                 self.btn.configure(state="disabled", text="FFmpeg ausente")
                 return
 
-            if self.gpu_vendor == "nvidia" and (self.gpu_vram == 0 or self.gpu_vram >= 4096):
-                self._scan_result.configure(text="GPU NVIDIA detectada. O modo GPU é recomendado.", fg=BLUE)
+            if self.gpu_vendor == "nvidia":
+                self.recommend_gpu = self.gpu_vram == 0 or self.gpu_vram >= 4096
+                if self.recommend_gpu:
+                    self._scan_result.configure(text="GPU NVIDIA detectada. O modo GPU e recomendado.", fg=BLUE)
+                else:
+                    self._scan_result.configure(
+                        text=(
+                            "GPU NVIDIA detectada, mas a VRAM esta abaixo do recomendado para o Whisper medium. "
+                            "O modo CPU e mais seguro; GPU pode falhar por falta de memoria."
+                        ),
+                        fg=ORANGE,
+                    )
                 self.btn.configure(state="normal", text="Escolher modo", command=self._page_mode)
             else:
                 self.mode = "cpu"
-                self._scan_result.configure(text="O aplicativo será configurado em modo CPU.", fg=ORANGE)
+                self._scan_result.configure(text="O aplicativo sera configurado em modo CPU.", fg=ORANGE)
                 self.btn.configure(state="normal", text="Instalar", command=self._page_install)
 
         self.root.after(300, finish)
@@ -352,14 +336,22 @@ class SetupWindow:
         lbl(f, f"GPU detectada: {self.gpu_name}", 10, color=BLUE).pack()
         sep(f)
 
-        self._mode_var = tk.StringVar(value="gpu")
+        default_mode = "gpu" if self.recommend_gpu else "cpu"
+        self._mode_var = tk.StringVar(value=default_mode)
         cards = tk.Frame(f, bg=BG)
         cards.pack(fill="x", padx=26, pady=6)
         self._card_frames = {}
 
+        gpu_title = "GPU NVIDIA - recomendado" if self.recommend_gpu else "GPU NVIDIA - tentar mesmo assim"
+        gpu_desc = (
+            "Mais rapido para arquivos longos. Requer driver NVIDIA atualizado."
+            if self.recommend_gpu
+            else "Pode ser mais rapido, mas placas MX/baixa VRAM podem falhar com Whisper medium."
+        )
+
         for mode, title, desc, color, bg in [
-            ("gpu", "GPU NVIDIA - recomendado", "Mais rápido para arquivos longos. Requer driver NVIDIA atualizado.", BLUE, "#e3f2fd"),
-            ("cpu", "CPU", "Mais compatível. Use se o modo GPU falhar ou se preferir estabilidade máxima.", GRAY, "#f5f5f5"),
+            ("gpu", gpu_title, gpu_desc, BLUE if self.recommend_gpu else ORANGE, "#e3f2fd" if self.recommend_gpu else "#fff3e0"),
+            ("cpu", "CPU - recomendado para baixa VRAM" if not self.recommend_gpu else "CPU", "Mais compativel. Use se o modo GPU falhar ou se preferir estabilidade maxima.", GRAY, "#f5f5f5"),
         ]:
             outer = tk.Frame(cards, bg=color, pady=1)
             outer.pack(fill="x", pady=(0, 10))
@@ -373,7 +365,7 @@ class SetupWindow:
                 widget.bind("<Button-1>", lambda _e, m=mode: self._sel_mode(m))
             self._card_frames[mode] = (outer, inner, color, bg)
 
-        self.mode = "gpu"
+        self.mode = default_mode
         self.btn.configure(state="normal", text="Instalar", command=self._page_install)
 
     def _sel_mode(self, mode):

@@ -64,6 +64,8 @@ O app não move nem apaga os arquivos originais.
 - Driver NVIDIA atualizado.
 - 8 GB livres em disco.
 
+Placas NVIDIA MX tambem podem ser detectadas, mas muitas tem 2 GB de VRAM. Nesses casos o VozaraApp recomenda CPU; o modo GPU pode ser tentado, mas pode falhar por falta de memoria com o Whisper medium.
+
 ## Onde o app grava arquivos
 
 | Conteúdo | Pasta |

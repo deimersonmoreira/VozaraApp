@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from hardware import detect_gpu_info
 from paths import apply_runtime_environment
 
 apply_runtime_environment()
@@ -18,49 +19,6 @@ def _run_text(cmd: list[str], timeout: int = 10) -> str:
     if result.returncode != 0:
         return ""
     return result.stdout.strip()
-
-
-def detect_gpu_info() -> dict:
-    info = {
-        "vendor": "none",
-        "name": "Nenhuma GPU NVIDIA detectada",
-        "vram_mb": 0,
-    }
-
-    out = _run_text([
-        "nvidia-smi",
-        "--query-gpu=name,memory.total",
-        "--format=csv,noheader,nounits",
-    ])
-    if out:
-        first = out.splitlines()[0]
-        parts = [p.strip() for p in first.split(",")]
-        info["vendor"] = "nvidia"
-        info["name"] = parts[0]
-        if len(parts) > 1:
-            try:
-                info["vram_mb"] = int(float(parts[1]))
-            except ValueError:
-                info["vram_mb"] = 0
-        return info
-
-    out = _run_text(["wmic", "path", "win32_VideoController", "get", "name"])
-    for line in out.splitlines():
-        name = line.strip()
-        if not name or name.lower() == "name":
-            continue
-        upper = name.upper()
-        if "NVIDIA" in upper:
-            info.update(vendor="nvidia", name=name)
-            return info
-        if "AMD" in upper or "RADEON" in upper:
-            info.update(vendor="amd", name=name)
-            return info
-        if "INTEL" in upper and ("ARC" in upper or "IRIS" in upper):
-            info.update(vendor="intel", name=name)
-            return info
-
-    return info
 
 
 def detect_device(preferred_mode: str = "auto") -> tuple[str, str, str]:

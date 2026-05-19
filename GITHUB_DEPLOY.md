@@ -13,6 +13,7 @@ BRANDING.md
 GITHUB_DEPLOY.md
 app.py
 core.py
+hardware.py
 first_run.py
 main.py
 paths.py
