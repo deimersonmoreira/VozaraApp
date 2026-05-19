@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+
+# Local app/runtime/generated data
+.test-data/
+.data-test/
+.dist-tmp/
+Transcrições/
+*.log
+config.json
+
+# Heavy distribution artifacts
+vendor/
+*.exe
+*.msi
+*.zip
+*.7z
+*.rar
+
+# Installer output and local tools
+Output/
+innosetup-*.exe
+
+# Editor/local assistant metadata
+.vscode/
+.idea/
+.claude/
+
+# OS
+Thumbs.db
+Desktop.ini

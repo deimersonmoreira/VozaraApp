@@ -1,0 +1,8 @@
+<svg width="620" height="160" viewBox="0 0 620 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Wordmark Vozara</title>
+  <desc id="desc">Nome Vozara com assinatura de transcrição local.</desc>
+  <text x="0" y="74" fill="#16324F" font-family="Segoe UI, Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="0">Vozara</text>
+  <text x="3" y="118" fill="#536675" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="500" letter-spacing="0">transcrição local de áudio e vídeo</text>
+  <path d="M431 72C443 43 461 43 471 72C481 101 499 101 511 72" stroke="#00A7A5" stroke-width="10" stroke-linecap="round"/>
+  <path d="M535 72H584" stroke="#F2B84B" stroke-width="10" stroke-linecap="round"/>
+</svg>

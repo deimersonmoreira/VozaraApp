@@ -1,0 +1,12 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Ícone Vozara</title>
+  <desc id="desc">Documento com onda de áudio e linhas de texto.</desc>
+  <rect width="256" height="256" rx="56" fill="#16324F"/>
+  <path d="M165 35H86C72.2 35 61 46.2 61 60V196C61 209.8 72.2 221 86 221H170C183.8 221 195 209.8 195 196V72L165 35Z" fill="#FDFEFE"/>
+  <path d="M165 35V72H195" fill="#D9E9F2"/>
+  <path d="M90 105C101 80 118 80 127 105C136 130 153 130 164 105" stroke="#00A7A5" stroke-width="13" stroke-linecap="round"/>
+  <path d="M90 142H166" stroke="#F2B84B" stroke-width="13" stroke-linecap="round"/>
+  <path d="M90 174H146" stroke="#16324F" stroke-width="13" stroke-linecap="round"/>
+  <circle cx="192" cy="194" r="31" fill="#00A7A5"/>
+  <path d="M178 194H206M192 180V208" stroke="#FDFEFE" stroke-width="8" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,19 @@
+<svg width="920" height="260" viewBox="0 0 920 260" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Logo Vozara</title>
+  <desc id="desc">Símbolo de documento com ondas de áudio e texto, acompanhado do nome Vozara.</desc>
+  <rect width="920" height="260" rx="34" fill="#F7F8FA"/>
+  <g transform="translate(54 42)">
+    <rect x="0" y="0" width="176" height="176" rx="38" fill="#16324F"/>
+    <path d="M116 24H58C48.1 24 40 32.1 40 42V134C40 143.9 48.1 152 58 152H118C127.9 152 136 143.9 136 134V48L116 24Z" fill="#FDFEFE"/>
+    <path d="M116 24V48H136" fill="#D9E9F2"/>
+    <path d="M62 72C70 55 82 55 88 72C94 89 106 89 114 72" stroke="#00A7A5" stroke-width="8" stroke-linecap="round"/>
+    <path d="M62 97H114" stroke="#F2B84B" stroke-width="8" stroke-linecap="round"/>
+    <path d="M62 119H101" stroke="#16324F" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="138" cy="136" r="22" fill="#00A7A5"/>
+    <path d="M128 136H148M138 126V146" stroke="#FDFEFE" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(270 68)">
+    <text x="0" y="72" fill="#16324F" font-family="Segoe UI, Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="0">Vozara</text>
+    <text x="2" y="116" fill="#536675" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="500" letter-spacing="0">transcrição local de áudio e vídeo</text>
+  </g>
+</svg>

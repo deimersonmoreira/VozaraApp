@@ -1,0 +1,10 @@
+av==17.0.1
+certifi==2026.4.22
+ctranslate2==4.7.1
+customtkinter==5.2.2
+faster-whisper==1.2.1
+huggingface_hub==1.13.0
+numpy==2.4.4
+onnxruntime==1.25.1
+tokenizers==0.23.1
+tqdm==4.67.3
