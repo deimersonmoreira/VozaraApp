@@ -15,6 +15,9 @@ $Temp = Join-Path $Root ".dist-tmp"
 
 New-Item -ItemType Directory -Force -Path $PythonDir, $RuntimePythonDir, $FfmpegBin, $Temp | Out-Null
 
+Write-Host "Gerando icone do aplicativo..."
+python (Join-Path $Root "scripts\create_icon.py")
+
 $pythonInstaller = Join-Path $PythonDir "python-$PythonVersion-amd64.exe"
 $pythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.exe"
 if (-not (Test-Path $pythonInstaller)) {
@@ -80,6 +83,7 @@ Write-Host " - $pythonInstaller"
 Write-Host " - $(Join-Path $RuntimePythonDir 'python.exe')"
 Write-Host " - $(Join-Path $FfmpegBin 'ffmpeg.exe')"
 Write-Host " - $(Join-Path $FfmpegBin 'ffprobe.exe')"
+Write-Host " - $(Join-Path $Root 'assets\icon.ico')"
 
 if ($CompileInstaller) {
     $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"

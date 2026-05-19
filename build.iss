@@ -15,7 +15,8 @@ AppPublisher=Deime
 DefaultDirName={localappdata}\{#AppDir}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\launcher.bat
+SetupIconFile=assets\icon.ico
+UninstallDisplayIcon={app}\assets\icon.ico
 OutputDir=.
 OutputBaseFilename=Instalar - VozaraApp
 Compression=lzma2
@@ -39,6 +40,7 @@ Source: "launcher.bat";             DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";                DestDir: "{app}"; Flags: ignoreversion
 Source: "BRANDING.md";              DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\*.svg";             DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "assets\*.ico";             DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "requirements-base.txt";    DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements-cpu.txt";     DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements-gpu.txt";     DestDir: "{app}"; Flags: ignoreversion
@@ -48,8 +50,8 @@ Source: "vendor\ffmpeg\bin\ffprobe.exe"; DestDir: "{app}\vendor\ffmpeg\bin"; Fla
 Source: "vendor\runtime\python\*"; DestDir: "{app}\runtime\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}";       Filename: "{app}\launcher.bat"; WorkingDir: "{app}"
-Name: "{userdesktop}\{#AppName}"; Filename: "{app}\launcher.bat"; WorkingDir: "{app}"
+Name: "{group}\{#AppName}";       Filename: "{app}\launcher.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
+Name: "{userdesktop}\{#AppName}"; Filename: "{app}\launcher.bat"; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"
 
 [UninstallRun]
 Filename: "{cmd}"; \

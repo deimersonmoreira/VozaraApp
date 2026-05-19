@@ -115,6 +115,7 @@ requirements-gpu.txt        PyTorch CUDA fixado
 requirements-nvidia.txt     Bibliotecas NVIDIA fixadas
 scripts/prepare_distribution.ps1
 assets/                     Logo, ícone e wordmark
+assets/icon.ico             Ícone do atalho e instalador
 ```
 
 ## Gerar instalador distribuível

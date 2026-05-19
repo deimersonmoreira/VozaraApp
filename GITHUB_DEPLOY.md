@@ -25,6 +25,7 @@ requirements-gpu.txt
 requirements-nvidia.txt
 scripts/prepare_distribution.ps1
 assets/icon.svg
+assets/icon.ico
 assets/logo.svg
 assets/wordmark.svg
 ```
