@@ -49,7 +49,7 @@ def _parse_vram_mb(value) -> int:
 
 def _vendor_from_name(name: str) -> str:
     upper = name.upper()
-    if "NVIDIA" in upper or "GEFORCE" in upper or "QUADRO" in upper or "RTX" in upper or "GTX" in upper:
+    if any(token in upper for token in ("NVIDIA", "GEFORCE", "QUADRO", "RTX", "GTX", "MX", "TESLA", "TITAN", "NVS")):
         return "nvidia"
     if "AMD" in upper or "RADEON" in upper:
         return "amd"

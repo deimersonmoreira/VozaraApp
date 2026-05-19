@@ -21,6 +21,7 @@ uninstall.py
 launcher.bat
 launcher.vbs
 build.iss
+build-online.iss
 requirements-base.txt
 requirements-cpu.txt
 requirements-gpu.txt
@@ -30,6 +31,7 @@ assets/icon.svg
 assets/icon.ico
 assets/logo.svg
 assets/wordmark.svg
+docs/GPU_COMPATIBILITY.md
 ```
 
 ## 2. O que não entra no GitHub
