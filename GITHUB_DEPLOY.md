@@ -21,7 +21,6 @@ uninstall.py
 launcher.bat
 launcher.vbs
 build.iss
-build-online.iss
 requirements-base.txt
 requirements-cpu.txt
 requirements-gpu.txt
@@ -32,6 +31,7 @@ assets/icon.ico
 assets/logo.svg
 assets/wordmark.svg
 docs/GPU_COMPATIBILITY.md
+docs/EXPRESS_GPU_UPGRADE_FLOW.md
 ```
 
 ## 2. O que não entra no GitHub
@@ -41,12 +41,15 @@ Esses itens ficam fora do repositório pelo `.gitignore`:
 ```text
 .venv/
 vendor/
+runtime/
 Transcrições/
 .dist-tmp/
 __pycache__/
 *.exe
 *.log
 .claude/
+unins*.exe
+unins*.dat
 ```
 
 ## 3. Quando compilar

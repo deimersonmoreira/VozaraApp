@@ -66,6 +66,14 @@ O app não move nem apaga os arquivos originais.
 
 Placas NVIDIA MX tambem podem ser detectadas, mas muitas tem 2 GB de VRAM. Nesses casos o VozaraApp recomenda CPU; o modo GPU pode ser tentado, mas pode falhar por falta de memoria com o Whisper medium.
 
+Na primeira configuração, o VozaraApp destaca **Transcrição Rápida (CPU)** como opção recomendada. Ela é mais estável, instala com menos dependências pesadas e funciona melhor para a maioria dos usuários.
+
+O modo **Transcrição Express (GPU NVIDIA)** é opcional. Ele pode transcrever mais rápido depois de instalado, mas baixa PyTorch CUDA e bibliotecas NVIDIA grandes. Em alguns computadores ou conexões lentas, esse processo pode levar horas e apresentar mais erros de compatibilidade. Recomenda-se escolher GPU apenas quando puder deixar o computador instalando sem pressa.
+
+Durante a instalação, o wizard mostra uma área de progresso detalhado com as mensagens de download e instalação de cada etapa. Isso ajuda a diferenciar uma etapa realmente travada de um download grande ainda em andamento.
+
+Também é possível instalar primeiro em CPU e ativar o **Express GPU** depois pela tela principal do app, no botão **Ativar Express GPU**. Se esse upgrade falhar, o VozaraApp mantém o modo CPU funcionando.
+
 ## Onde o app grava arquivos
 
 | Conteúdo | Pasta |
@@ -100,6 +108,8 @@ Essa organização evita erros de permissão em `Program Files` e não exige adm
 
 Se o app tentar abrir em GPU e falhar, ele registra o erro e tenta CPU automaticamente.
 
+Para testes em computadores variados, o modo CPU é o caminho mais compatível. O modo GPU é uma aceleração opcional para quem tem NVIDIA compatível, driver atualizado e tempo para aguardar a instalação inicial.
+
 ## Estrutura do projeto
 
 ```text
@@ -119,6 +129,7 @@ requirements-nvidia.txt     Bibliotecas NVIDIA fixadas
 scripts/prepare_distribution.ps1
 assets/                     Logo, ícone e wordmark
 assets/icon.ico             Ícone do atalho e instalador
+docs/                       Documentos técnicos e fluxo Express GPU
 ```
 
 ## Gerar instalador distribuível

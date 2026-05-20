@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Vendor = Join-Path $Root "vendor"
 $PythonDir = Join-Path $Vendor "python"
-$RuntimePythonDir = Join-Path $Vendor "runtime\python"
+$RuntimePythonDir = Join-Path $Root "runtime\python"
 $FfmpegDir = Join-Path $Vendor "ffmpeg"
 $FfmpegBin = Join-Path $FfmpegDir "bin"
 $Temp = Join-Path $Root ".dist-tmp"
@@ -26,7 +26,7 @@ if (-not (Test-Path $pythonInstaller)) {
 }
 
 if (-not (Test-Path (Join-Path $RuntimePythonDir "python.exe")) -or -not (Test-Path (Join-Path $RuntimePythonDir "pythonw.exe"))) {
-    Write-Host "Preparando Python interno em vendor\runtime\python..."
+    Write-Host "Preparando Python interno em runtime\python..."
     $args = @(
         "/quiet",
         "InstallAllUsers=0",

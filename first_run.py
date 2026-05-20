@@ -2,6 +2,7 @@ import ctypes
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,7 +29,6 @@ from paths import (
     VENV,
     apply_runtime_environment,
     bootstrap_python,
-    venv_installed,
 )
 
 apply_runtime_environment()
@@ -41,15 +41,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("transcrever.setup")
 
-W, H = 580, 560
+W, H = 620, 660
 BG = "white"
-BLUE = "#1565c0"
-GREEN = "#2e7d32"
+BRAND_BLUE = "#16324F"
+BRAND_GREEN = "#00A7A5"
+BRAND_YELLOW = "#F2B84B"
+BLUE = BRAND_BLUE
+GREEN = BRAND_GREEN
 ORANGE = "#e65100"
 RED = "#c62828"
 GRAY = "#777777"
 DARK = "#1a1a2e"
 LGRAY = "#f5f5f5"
+ALERT_BG = "#ffebee"
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+ICON_FILE = BASE / "assets" / "icon.ico"
 
 
 def _run(cmd: list[str], timeout: int | None = None) -> tuple[bool, str]:
@@ -76,6 +82,77 @@ def _run_retry(cmd: list[str], attempts: int = 3, timeout: int | None = None) ->
     last_output = ""
     for attempt in range(1, attempts + 1):
         ok, output = _run(cmd, timeout=timeout)
+        last_output = output
+        if ok:
+            return True, output
+        logger.warning("Tentativa %s/%s falhou", attempt, attempts)
+    return False, last_output
+
+
+def _clean_output_line(line: str) -> str:
+    return ANSI_RE.sub("", line).strip()
+
+
+def _run_stream(cmd: list[str], on_output=None, timeout: int | None = None) -> tuple[bool, str]:
+    logger.info("Executando com progresso: %s", " ".join(map(str, cmd)))
+    output_lines: list[str] = []
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            creationflags=creationflags,
+        )
+        assert proc.stdout is not None
+        pending = ""
+        last_line = ""
+
+        def emit(raw: str):
+            nonlocal last_line
+            line = _clean_output_line(raw)
+            if not line or line == last_line:
+                return
+            last_line = line
+            output_lines.append(line)
+            logger.info("[progresso] %s", line)
+            if on_output:
+                on_output(line)
+
+        while True:
+            ch = proc.stdout.read(1)
+            if ch == "" and proc.poll() is not None:
+                break
+            if ch in ("\n", "\r"):
+                emit(pending)
+                pending = ""
+            elif ch:
+                pending += ch
+                if len(pending) >= 500:
+                    emit(pending)
+                    pending = ""
+        emit(pending)
+
+        returncode = proc.wait(timeout=timeout)
+        output = "\n".join(output_lines)
+        if returncode != 0:
+            logger.error("Falha (%s): %s", returncode, output[-4000:])
+        return returncode == 0, output
+    except Exception as exc:
+        logger.exception("Erro ao executar comando com progresso")
+        return False, str(exc)
+
+
+def _run_retry_stream(cmd: list[str], attempts: int = 3, timeout: int | None = None, on_output=None) -> tuple[bool, str]:
+    last_output = ""
+    for attempt in range(1, attempts + 1):
+        if on_output and attempts > 1:
+            on_output(f"Tentativa {attempt}/{attempts}")
+        ok, output = _run_stream(cmd, on_output=on_output, timeout=timeout)
         last_output = output
         if ok:
             return True, output
@@ -141,6 +218,11 @@ class SetupWindow:
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self._confirm_close)
+        if ICON_FILE.exists():
+            try:
+                self.root.iconbitmap(str(ICON_FILE))
+            except Exception:
+                logger.exception("Nao foi possivel carregar icone da janela")
 
         self.mode = "cpu"
         self.gpu_vendor = "none"
@@ -148,6 +230,7 @@ class SetupWindow:
         self.gpu_vram = 0
         self.recommend_gpu = False
         self.install_failed = False
+        self._last_progress = ""
 
         self._build_chrome()
         self._center()
@@ -158,19 +241,34 @@ class SetupWindow:
             self.root.destroy()
 
     def _build_chrome(self):
-        hdr = tk.Frame(self.root, bg=BLUE, height=62)
+        hdr = tk.Frame(self.root, bg=BRAND_BLUE, height=78)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
+
+        mark = tk.Canvas(hdr, width=42, height=42, bg=BRAND_BLUE, bd=0, highlightthickness=0)
+        mark.place(x=18, rely=0.5, anchor="w")
+        mark.create_oval(3, 3, 39, 39, fill=BRAND_GREEN, outline="")
+        mark.create_arc(11, 10, 31, 32, start=300, extent=240, style="arc", outline="white", width=4)
+        mark.create_oval(27, 7, 35, 15, fill=BRAND_YELLOW, outline="")
+
         tk.Label(
             hdr,
-            text="VozaraApp",
-            font=("Segoe UI", 14, "bold"),
-            bg=BLUE,
+            text="Vozara",
+            font=("Segoe UI", 20, "bold"),
+            bg=BRAND_BLUE,
             fg="white",
             anchor="w",
-        ).place(relx=0, rely=0.5, anchor="w", x=20)
+        ).place(x=70, y=19, anchor="w")
+        tk.Label(
+            hdr,
+            text="transcrição local de áudio e vídeo",
+            font=("Segoe UI", 9),
+            bg=BRAND_BLUE,
+            fg="#d7eef0",
+            anchor="w",
+        ).place(x=72, y=48, anchor="w")
 
-        self.lbl_step = tk.Label(hdr, text="1 / 4", font=("Segoe UI", 10), bg=BLUE, fg="#90caf9")
+        self.lbl_step = tk.Label(hdr, text="1 / 4", font=("Segoe UI", 10, "bold"), bg=BRAND_BLUE, fg=BRAND_YELLOW)
         self.lbl_step.place(relx=1, rely=0.5, anchor="e", x=-20)
 
         self.body = tk.Frame(self.root, bg=BG)
@@ -184,10 +282,10 @@ class SetupWindow:
             ftr,
             text="Próximo",
             font=("Segoe UI", 11, "bold"),
-            bg=BLUE,
+            bg=BRAND_GREEN,
             fg="white",
             relief="flat",
-            activebackground="#1976d2",
+            activebackground="#008c8a",
             activeforeground="white",
             padx=22,
             pady=6,
@@ -310,7 +408,7 @@ class SetupWindow:
             if self.gpu_vendor == "nvidia":
                 self.recommend_gpu = self.gpu_vram == 0 or self.gpu_vram >= 4096
                 if self.recommend_gpu:
-                    self._scan_result.configure(text="GPU NVIDIA detectada. O modo GPU e recomendado.", fg=BLUE)
+                    self._scan_result.configure(text="GPU NVIDIA detectada. CPU continua recomendado para instalar com menos erro; GPU fica como aceleração opcional.", fg=BLUE)
                 else:
                     self._scan_result.configure(
                         text=(
@@ -336,34 +434,78 @@ class SetupWindow:
         lbl(f, f"GPU detectada: {self.gpu_name}", 10, color=BLUE).pack()
         sep(f)
 
-        default_mode = "gpu" if self.recommend_gpu else "cpu"
+        default_mode = "cpu"
         self._mode_var = tk.StringVar(value=default_mode)
         cards = tk.Frame(f, bg=BG)
         cards.pack(fill="x", padx=26, pady=6)
         self._card_frames = {}
 
-        gpu_title = "GPU NVIDIA - recomendado" if self.recommend_gpu else "GPU NVIDIA - tentar mesmo assim"
-        gpu_desc = (
-            "Mais rapido para arquivos longos. Requer driver NVIDIA atualizado."
-            if self.recommend_gpu
-            else "Pode ser mais rapido, mas placas MX/baixa VRAM podem falhar com Whisper medium."
-        )
+        cpu_title = "Transcrição Rápida (CPU) - recomendado"
+        cpu_desc = "Mais estável e funcional para a maioria dos usuários. Instala com menos dependências pesadas e menor chance de erro."
+        gpu_title = "Transcrição Express (GPU NVIDIA) - opcional"
+        gpu_desc = "Pode transcrever mais rápido depois de instalado, mas a instalação demora mais e pode apresentar mais erros de compatibilidade."
 
         for mode, title, desc, color, bg in [
-            ("gpu", gpu_title, gpu_desc, BLUE if self.recommend_gpu else ORANGE, "#e3f2fd" if self.recommend_gpu else "#fff3e0"),
-            ("cpu", "CPU - recomendado para baixa VRAM" if not self.recommend_gpu else "CPU", "Mais compativel. Use se o modo GPU falhar ou se preferir estabilidade maxima.", GRAY, "#f5f5f5"),
+            ("cpu", cpu_title, cpu_desc, BLUE, "#e3f2fd"),
+            ("gpu", gpu_title, gpu_desc, GREEN, "#e8f5e9"),
         ]:
-            outer = tk.Frame(cards, bg=color, pady=1)
-            outer.pack(fill="x", pady=(0, 10))
-            inner = tk.Frame(outer, bg=bg, padx=12, pady=10, cursor="hand2")
+            outer = tk.Frame(cards, bg=color, padx=2, pady=2)
+            outer.pack(fill="x", pady=(0, 12))
+            inner = tk.Frame(outer, bg=bg, padx=16, pady=12, cursor="hand2")
             inner.pack(fill="x")
-            rb = tk.Radiobutton(inner, variable=self._mode_var, value=mode, bg=bg, command=lambda m=mode: self._sel_mode(m))
-            rb.pack(side="left")
-            tk.Label(inner, text=title, bg=bg, fg=color, font=("Segoe UI", 12, "bold"), cursor="hand2").pack(anchor="w")
-            tk.Label(inner, text=desc, bg=bg, fg="#444", font=("Segoe UI", 10), wraplength=450, cursor="hand2").pack(anchor="w", padx=(26, 0), pady=(3, 0))
-            for widget in (outer, inner) + tuple(inner.winfo_children()):
+            header = tk.Frame(inner, bg=bg, cursor="hand2")
+            header.pack(fill="x")
+            rb = tk.Radiobutton(header, variable=self._mode_var, value=mode, bg=bg, command=lambda m=mode: self._sel_mode(m))
+            rb.place(x=0, rely=0.5, anchor="w")
+            tk.Label(
+                header,
+                text=title,
+                bg=bg,
+                fg=color,
+                font=("Segoe UI", 13, "bold"),
+                cursor="hand2",
+                anchor="center",
+            ).pack(fill="x", padx=28)
+            tk.Label(
+                inner,
+                text=desc,
+                bg=bg,
+                fg="#333333",
+                font=("Segoe UI", 10),
+                wraplength=500,
+                justify="center",
+                cursor="hand2",
+            ).pack(fill="x", pady=(7, 0))
+            if mode == "gpu":
+                tk.Label(
+                    inner,
+                    text="ALERTA: a instalação GPU pode levar horas, exige internet estável e pode falhar em algumas placas. Use quando puder esperar.",
+                    bg=bg,
+                    fg=RED,
+                    font=("Segoe UI", 9, "bold"),
+                    wraplength=500,
+                    justify="center",
+                    cursor="hand2",
+                ).pack(fill="x", pady=(8, 0))
+            clickable = [outer, inner]
+            for child in inner.winfo_children():
+                clickable.append(child)
+                clickable.extend(child.winfo_children())
+            for widget in clickable:
                 widget.bind("<Button-1>", lambda _e, m=mode: self._sel_mode(m))
             self._card_frames[mode] = (outer, inner, color, bg)
+
+        info_box = tk.Frame(cards, bg="#f7f8fa", padx=12, pady=10)
+        info_box.pack(fill="x", pady=(0, 4))
+        tk.Label(
+            info_box,
+            text="Você pode instalar agora a versão normal em CPU e migrar para a opção avançada Express GPU depois, pela tela principal do Vozara.",
+            bg="#f7f8fa",
+            fg="#536675",
+            font=("Segoe UI", 10),
+            wraplength=520,
+            justify="center",
+        ).pack(fill="x")
 
         self.mode = default_mode
         self.btn.configure(state="normal", text="Instalar", command=self._page_install)
@@ -380,18 +522,40 @@ class SetupWindow:
         self.lbl_step.configure(text="4 / 4")
         self.btn.configure(state="disabled", text="Instalando...")
         self.install_failed = False
+        self._last_progress = ""
         f = self.body
 
         mode_txt = "GPU NVIDIA" if self.mode == "gpu" else "CPU"
         lbl(f, f"Instalando em modo {mode_txt}", 14, bold=True).pack(pady=(20, 4))
         lbl(f, "Não feche esta janela. Se a internet cair, o instalador tentará novamente.", 10, color=GRAY).pack()
+        if self.mode == "gpu":
+            alert = tk.Frame(f, bg=RED, padx=1, pady=1)
+            alert.pack(fill="x", padx=34, pady=(8, 0))
+            alert_inner = tk.Frame(alert, bg=ALERT_BG, padx=10, pady=8)
+            alert_inner.pack(fill="x")
+            tk.Label(
+                alert_inner,
+                text="ALERTA: Transcrição Express (GPU) pode demorar horas para instalar",
+                font=("Segoe UI", 10, "bold"),
+                bg=ALERT_BG,
+                fg=RED,
+            ).pack(anchor="w")
+            tk.Label(
+                alert_inner,
+                text="Este modo baixa PyTorch CUDA e bibliotecas NVIDIA grandes. Pode apresentar mais erros de compatibilidade. Depois de instalado, a transcrição tende a ficar bem mais rápida.",
+                font=("Segoe UI", 9),
+                bg=ALERT_BG,
+                fg=RED,
+                wraplength=520,
+                justify="left",
+            ).pack(anchor="w", pady=(2, 0))
         sep(f)
 
         self._steps = [
             ("venv", "Preparar ambiente local do app"),
             ("base", "Instalar dependências fixadas"),
-            ("torch", "Instalar PyTorch do modo escolhido"),
-            ("nvidia", "Instalar bibliotecas NVIDIA" if self.mode == "gpu" else "Validar modo CPU"),
+            ("torch", "Instalar PyTorch CUDA (pode demorar horas)" if self.mode == "gpu" else "Instalar PyTorch CPU"),
+            ("nvidia", "Instalar bibliotecas NVIDIA grandes" if self.mode == "gpu" else "Validar modo CPU"),
             ("ffmpeg", "Validar FFmpeg incluído"),
             ("model", "Baixar modelo Whisper medium (~1,5 GB)"),
             ("config", "Salvar configuração"),
@@ -410,7 +574,58 @@ class SetupWindow:
 
         self._lbl_status = lbl(f, "Iniciando...", 10, color=GRAY, wraplength=500, justify="center")
         self._lbl_status.pack(pady=(14, 0))
+        progress_box = tk.Frame(f, bg="#eeeeee", padx=1, pady=1)
+        progress_box.pack(fill="both", expand=True, padx=34, pady=(12, 10))
+        progress_inner = tk.Frame(progress_box, bg="#fafafa")
+        progress_inner.pack(fill="both", expand=True)
+        tk.Label(
+            progress_inner,
+            text="Progresso detalhado",
+            font=("Segoe UI", 9, "bold"),
+            bg="#fafafa",
+            fg=GRAY,
+            anchor="w",
+        ).pack(fill="x", padx=10, pady=(8, 2))
+        log_frame = tk.Frame(progress_inner, bg="#fafafa")
+        log_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self._log_text = tk.Text(
+            log_frame,
+            height=6,
+            bg="#fafafa",
+            fg="#333333",
+            relief="flat",
+            wrap="word",
+            font=("Consolas", 9),
+            state="disabled",
+        )
+        self._log_text.pack(side="left", fill="both", expand=True)
+        scrollbar = tk.Scrollbar(log_frame, command=self._log_text.yview)
+        scrollbar.pack(side="right", fill="y")
+        self._log_text.configure(yscrollcommand=scrollbar.set)
+        self._append_progress("Aguardando início da instalação...")
         threading.Thread(target=self._do_install, daemon=True).start()
+
+    def _append_progress(self, text: str):
+        clean = _clean_output_line(text)
+        if not clean or clean == self._last_progress:
+            return
+        self._last_progress = clean
+
+        def write():
+            if not hasattr(self, "_log_text") or not self._log_text.winfo_exists():
+                return
+            self._log_text.configure(state="normal")
+            self._log_text.insert("end", clean + "\n")
+            lines = int(self._log_text.index("end-1c").split(".")[0])
+            if lines > 140:
+                self._log_text.delete("1.0", f"{lines - 140}.0")
+            self._log_text.configure(state="disabled")
+            self._log_text.see("end")
+
+        self.root.after(0, write)
+
+    def _run_with_progress(self, cmd: list[str], attempts: int = 3, timeout: int | None = None) -> tuple[bool, str]:
+        return _run_retry_stream(cmd, attempts=attempts, timeout=timeout, on_output=self._append_progress)
 
     def _upd_step(self, key, state, status=None):
         cfg = {
@@ -433,13 +648,14 @@ class SetupWindow:
 
     def _do_install(self):
         self._upd_step("venv", "run", "Criando ambiente virtual em LocalAppData...")
+        self._append_progress("Preparando ambiente local do VozaraApp.")
         VENV.parent.mkdir(parents=True, exist_ok=True)
         if not PYTHONV.exists():
             ok, _ = _run_retry([str(bootstrap_python()), "-m", "venv", str(VENV)], attempts=2)
             if not ok:
                 self._fatal("venv", "Não foi possível criar o ambiente local do app.")
                 return
-        ok, _ = _run_retry([str(PYTHONV), "-m", "pip", "install", "--upgrade", "pip", "--quiet"], attempts=2)
+        ok, _ = self._run_with_progress([str(PYTHONV), "-m", "pip", "install", "--upgrade", "pip", "--progress-bar", "raw"], attempts=2)
         if not ok:
             self._fatal("venv", "Não foi possível atualizar o instalador de pacotes.")
             return
@@ -447,29 +663,34 @@ class SetupWindow:
 
         self._upd_step("base", "run", "Instalando faster-whisper, CustomTkinter e dependências fixadas...")
         if REQUIREMENTS_BASE.exists():
-            cmd = [str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_BASE), "--quiet"]
+            cmd = [str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_BASE), "--progress-bar", "raw"]
         else:
-            cmd = [str(PYTHONV), "-m", "pip", "install", "faster-whisper==1.2.1", "customtkinter==5.2.2", "--quiet"]
-        ok, _ = _run_retry(cmd, attempts=3)
+            cmd = [str(PYTHONV), "-m", "pip", "install", "faster-whisper==1.2.1", "customtkinter==5.2.2", "--progress-bar", "raw"]
+        ok, _ = self._run_with_progress(cmd, attempts=3)
         if not ok:
             self._fatal("base", "Falha ao instalar dependências principais. Verifique a internet.")
             return
         self._upd_step("base", "ok")
 
-        self._upd_step("torch", "run", "Instalando PyTorch fixado...")
+        torch_status = (
+            "Baixando e instalando PyTorch CUDA. Esse passo pode parecer travado e pode levar horas em internet lenta; depois disso, a transcrição com GPU fica bem mais rápida."
+            if self.mode == "gpu"
+            else "Instalando PyTorch CPU. Esse modo costuma instalar mais rápido e funciona em mais computadores."
+        )
+        self._upd_step("torch", "run", torch_status)
         if self.mode == "gpu":
-            torch_cmd = [str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_GPU), "--quiet"]
+            torch_cmd = [str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_GPU), "--progress-bar", "raw"]
         else:
-            torch_cmd = [str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_CPU), "--quiet"]
-        ok, _ = _run_retry(torch_cmd, attempts=3)
+            torch_cmd = [str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_CPU), "--progress-bar", "raw"]
+        ok, _ = self._run_with_progress(torch_cmd, attempts=3)
         if not ok:
             self._fatal("torch", "Falha ao instalar PyTorch. Verifique conexão e espaço em disco.")
             return
         self._upd_step("torch", "ok")
 
         if self.mode == "gpu":
-            self._upd_step("nvidia", "run", "Instalando bibliotecas NVIDIA fixadas...")
-            ok, _ = _run_retry([str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_NVIDIA), "--quiet"], attempts=3)
+            self._upd_step("nvidia", "run", "Instalando bibliotecas NVIDIA. São pacotes grandes; aguarde mesmo se parecer parado.")
+            ok, _ = self._run_with_progress([str(PYTHONV), "-m", "pip", "install", "-r", str(REQUIREMENTS_NVIDIA), "--progress-bar", "raw"], attempts=3)
             if not ok:
                 self._fatal("nvidia", "Falha ao instalar bibliotecas NVIDIA. Use CPU ou atualize o driver.")
                 return
@@ -484,10 +705,10 @@ class SetupWindow:
         self._upd_step("ffmpeg", "ok")
 
         self._upd_step("model", "run", "Baixando modelo Whisper medium. Esse passo pode demorar...")
-        ok, _ = _run_retry([
+        ok, _ = self._run_with_progress([
             str(PYTHONV),
             "-c",
-            "from faster_whisper import WhisperModel; WhisperModel('medium', device='cpu', compute_type='int8')",
+            "print('Preparando download do modelo Whisper medium...', flush=True); from faster_whisper import WhisperModel; WhisperModel('medium', device='cpu', compute_type='int8'); print('Modelo Whisper medium pronto.', flush=True)",
         ], attempts=3, timeout=None)
         if not ok:
             self._fatal("model", "Falha ao baixar o modelo Whisper. Confira internet, antivírus e espaço livre.")
@@ -518,8 +739,4 @@ class SetupWindow:
 
 
 if __name__ == "__main__":
-    if venv_installed():
-        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        subprocess.Popen([str(PYTHONW), str(BASE / "app.py")], creationflags=creationflags)
-    else:
-        SetupWindow().run()
+    SetupWindow().run()

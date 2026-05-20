@@ -1,13 +1,18 @@
 import json
 import logging
+import os
 import queue
+import re
+import subprocess
 import threading
 import time
 from pathlib import Path
+import tkinter as tk
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from hardware import detect_gpu_info
 from core import (
     Transcriber,
     detect_device,
@@ -15,7 +20,7 @@ from core import (
     format_duration,
     media_duration_seconds,
 )
-from paths import CONFIG_FILE, DEFAULT_OUTPUT_DIR, LOG_FILE, apply_runtime_environment
+from paths import BASE, CONFIG_FILE, DEFAULT_OUTPUT_DIR, LOG_FILE, PYTHONV, REQUIREMENTS_GPU, REQUIREMENTS_NVIDIA, apply_runtime_environment
 
 apply_runtime_environment()
 
@@ -26,11 +31,87 @@ logging.basicConfig(
     encoding="utf-8",
 )
 logger = logging.getLogger("transcrever")
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+BRAND_BLUE = "#16324F"
+BRAND_GREEN = "#00A7A5"
+BRAND_YELLOW = "#F2B84B"
+BRAND_BG = "#F7F8FA"
+BRAND_TEXT = "#536675"
+ICON_FILE = BASE / "assets" / "icon.ico"
 
 EXTENSOES = (
     "*.ogg", "*.opus", "*.mp3", "*.m4a", "*.wav", "*.aac",
     "*.mp4", "*.mkv", "*.avi", "*.webm", "*.mov",
 )
+
+
+def _clean_output_line(line: str) -> str:
+    return ANSI_RE.sub("", line).strip()
+
+
+def _run_stream(cmd: list[str], on_output=None) -> tuple[bool, str]:
+    logger.info("Executando upgrade Express: %s", " ".join(map(str, cmd)))
+    output_lines: list[str] = []
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            creationflags=creationflags,
+        )
+        assert proc.stdout is not None
+        pending = ""
+        last_line = ""
+
+        def emit(raw: str):
+            nonlocal last_line
+            line = _clean_output_line(raw)
+            if not line or line == last_line:
+                return
+            last_line = line
+            output_lines.append(line)
+            logger.info("[upgrade-express] %s", line)
+            if on_output:
+                on_output(line)
+
+        while True:
+            ch = proc.stdout.read(1)
+            if ch == "" and proc.poll() is not None:
+                break
+            if ch in ("\n", "\r"):
+                emit(pending)
+                pending = ""
+            elif ch:
+                pending += ch
+                if len(pending) >= 500:
+                    emit(pending)
+                    pending = ""
+        emit(pending)
+        returncode = proc.wait()
+        output = "\n".join(output_lines)
+        if returncode != 0:
+            logger.error("Upgrade Express falhou (%s): %s", returncode, output[-4000:])
+        return returncode == 0, output
+    except Exception as exc:
+        logger.exception("Erro no upgrade Express")
+        return False, str(exc)
+
+
+def _cuda_validation_cmd() -> list[str]:
+    return [
+        str(PYTHONV),
+        "-c",
+        "import torch; print('CUDA available:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'GPU unavailable')",
+    ]
+
+
+def _output_has_cuda(output: str) -> bool:
+    return "CUDA available: True" in output
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("blue")
@@ -61,14 +142,27 @@ class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("VozaraApp")
-        self.geometry("760x660")
-        self.minsize(720, 620)
+        self.geometry("900x760")
+        self.minsize(820, 700)
+        self.configure(fg_color=BRAND_BG)
+        if ICON_FILE.exists():
+            try:
+                self.iconbitmap(str(ICON_FILE))
+            except Exception:
+                logger.exception("Nao foi possivel carregar icone da janela principal")
 
         self.config_data = _load_config()
         self.device = "cpu"
         self.compute_type = "int8"
         self.running = False
         self.paused = False
+        self.upgrading_gpu = False
+        self.gpu_info = detect_gpu_info()
+        self.upgrade_window = None
+        self.upgrade_log = None
+        self.upgrade_progress = None
+        self.upgrade_close_btn = None
+        self.upgrade_finished = False
 
         self.audios: list[Path] = []
         self.file_rows: dict[str, dict] = {}
@@ -87,22 +181,73 @@ class MainWindow(ctk.CTk):
         logger.info("Aplicativo iniciado")
 
     def _build_ui(self):
+        header = ctk.CTkFrame(self, fg_color=BRAND_BLUE, height=92, corner_radius=0)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+
+        mark = tk.Canvas(header, width=50, height=50, bg=BRAND_BLUE, bd=0, highlightthickness=0)
+        mark.place(x=24, rely=0.5, anchor="w")
+        mark.create_oval(4, 4, 46, 46, fill=BRAND_GREEN, outline="")
+        mark.create_arc(14, 12, 36, 38, start=300, extent=240, style="arc", outline="white", width=5)
+        mark.create_oval(33, 8, 43, 18, fill=BRAND_YELLOW, outline="")
+
         ctk.CTkLabel(
-            self,
-            text="VozaraApp",
-            font=ctk.CTkFont(size=22, weight="bold"),
-        ).pack(pady=(20, 4))
+            header,
+            text="Vozara",
+            font=ctk.CTkFont(size=24, weight="bold"),
+            text_color="white",
+        ).place(x=88, y=27, anchor="w")
+        ctk.CTkLabel(
+            header,
+            text="transcrição local de áudio e vídeo",
+            font=ctk.CTkFont(size=12),
+            text_color="#d7eef0",
+        ).place(x=90, y=58, anchor="w")
 
         self.lbl_device = ctk.CTkLabel(
-            self,
+            header,
             text="Detectando dispositivo...",
             font=ctk.CTkFont(size=12),
-            text_color="gray",
+            text_color=BRAND_YELLOW,
+            anchor="e",
+            wraplength=360,
         )
-        self.lbl_device.pack(pady=(0, 12))
+        self.lbl_device.place(relx=1, rely=0.5, anchor="e", x=-24)
 
-        frame_add = ctk.CTkFrame(self, fg_color="transparent")
-        frame_add.pack(fill="x", padx=22, pady=(0, 8))
+        main = ctk.CTkFrame(self, fg_color="transparent")
+        main.pack(fill="both", expand=True, padx=18, pady=14)
+        main.grid_columnconfigure(0, weight=1)
+        main.grid_rowconfigure(2, weight=1)
+
+        frame_mode = ctk.CTkFrame(main, fg_color="#ffffff", corner_radius=8)
+        frame_mode.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        frame_mode.grid_columnconfigure(0, weight=1)
+
+        self.lbl_mode_hint = ctk.CTkLabel(
+            frame_mode,
+            text="Modo atual: Transcrição Rápida (CPU). O Express GPU pode ser ativado depois.",
+            font=ctk.CTkFont(size=12),
+            text_color=BRAND_TEXT,
+            wraplength=610,
+            justify="left",
+        )
+        self.lbl_mode_hint.grid(row=0, column=0, sticky="ew", padx=14, pady=12)
+
+        self.btn_upgrade = ctk.CTkButton(
+            frame_mode,
+            text="Ativar Express GPU",
+            command=self._upgrade_to_express,
+            width=165,
+            height=34,
+            fg_color=BRAND_GREEN,
+            hover_color="#008c8a",
+        )
+        self.btn_upgrade.grid(row=0, column=1, sticky="e", padx=14, pady=12)
+        self._refresh_upgrade_button()
+
+        frame_add = ctk.CTkFrame(main, fg_color="transparent")
+        frame_add.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        frame_add.grid_columnconfigure(0, weight=1)
 
         ctk.CTkButton(
             frame_add,
@@ -110,7 +255,9 @@ class MainWindow(ctk.CTk):
             command=self._adicionar_arquivos,
             height=38,
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(side="left", expand=True, fill="x", padx=(0, 6))
+            fg_color="#3d91d5",
+            hover_color="#2878b9",
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
         ctk.CTkButton(
             frame_add,
@@ -120,7 +267,7 @@ class MainWindow(ctk.CTk):
             height=38,
             fg_color="#546e7a",
             hover_color="#37474f",
-        ).pack(side="left", padx=(0, 6))
+        ).grid(row=0, column=1, padx=(0, 8))
 
         ctk.CTkButton(
             frame_add,
@@ -130,28 +277,31 @@ class MainWindow(ctk.CTk):
             height=38,
             fg_color="#e53935",
             hover_color="#b71c1c",
-        ).pack(side="left")
+        ).grid(row=0, column=2)
 
-        frame_lista = ctk.CTkFrame(self)
-        frame_lista.pack(fill="both", expand=True, padx=22, pady=(0, 10))
+        frame_lista = ctk.CTkFrame(main, fg_color="#ffffff", corner_radius=8)
+        frame_lista.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
+        frame_lista.grid_columnconfigure(0, weight=1)
+        frame_lista.grid_rowconfigure(1, weight=1)
 
         self.lbl_fila = ctk.CTkLabel(
             frame_lista,
             text="Nenhum arquivo adicionado",
             font=ctk.CTkFont(size=13, weight="bold"),
         )
-        self.lbl_fila.pack(anchor="w", padx=12, pady=(10, 4))
+        self.lbl_fila.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 4))
 
-        self.scroll = ctk.CTkScrollableFrame(frame_lista, height=220)
-        self.scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.scroll = ctk.CTkScrollableFrame(frame_lista, height=150, fg_color="#f1f3f5", corner_radius=8)
+        self.scroll.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
-        frame_dest = ctk.CTkFrame(self, fg_color="transparent")
-        frame_dest.pack(fill="x", padx=22, pady=(0, 8))
+        frame_dest = ctk.CTkFrame(main, fg_color="transparent")
+        frame_dest.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+        frame_dest.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(frame_dest, text="Salvar em:", font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(frame_dest, text="Salvar em:", font=ctk.CTkFont(size=12)).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         self.entry_destino = ctk.CTkEntry(frame_dest, font=ctk.CTkFont(size=12), state="readonly")
-        self.entry_destino.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.entry_destino.grid(row=0, column=1, sticky="ew", padx=(0, 8))
         self._set_entry_destino(self.pasta_saida)
 
         ctk.CTkButton(
@@ -162,29 +312,31 @@ class MainWindow(ctk.CTk):
             height=30,
             fg_color="#546e7a",
             hover_color="#37474f",
-        ).pack(side="left")
+        ).grid(row=0, column=2)
 
-        frame_prog = ctk.CTkFrame(self, fg_color="transparent")
-        frame_prog.pack(fill="x", padx=22, pady=(0, 6))
+        frame_prog = ctk.CTkFrame(main, fg_color="transparent")
+        frame_prog.grid(row=4, column=0, sticky="ew", pady=(0, 6))
+        frame_prog.grid_columnconfigure(0, weight=1)
 
         self.lbl_prog = ctk.CTkLabel(frame_prog, text="0 / 0 arquivos", font=ctk.CTkFont(size=12))
-        self.lbl_prog.pack(anchor="w", pady=(0, 5))
+        self.lbl_prog.grid(row=0, column=0, sticky="w", pady=(0, 5))
 
         self.progressbar = ctk.CTkProgressBar(frame_prog, height=14, corner_radius=7)
-        self.progressbar.pack(fill="x")
+        self.progressbar.grid(row=1, column=0, sticky="ew")
         self.progressbar.set(0)
 
         self.lbl_status = ctk.CTkLabel(
-            self,
+            main,
             text="Adicione arquivos para começar.",
             font=ctk.CTkFont(size=12),
             text_color="gray",
-            wraplength=700,
+            wraplength=820,
         )
-        self.lbl_status.pack(pady=(8, 8))
+        self.lbl_status.grid(row=5, column=0, sticky="ew", pady=(4, 8))
 
-        frame_btns = ctk.CTkFrame(self, fg_color="transparent")
-        frame_btns.pack(fill="x", padx=22, pady=(0, 18))
+        frame_btns = ctk.CTkFrame(main, fg_color="transparent")
+        frame_btns.grid(row=6, column=0, sticky="ew", pady=(0, 10))
+        frame_btns.grid_columnconfigure(0, weight=1)
 
         self.btn_start = ctk.CTkButton(
             frame_btns,
@@ -192,8 +344,10 @@ class MainWindow(ctk.CTk):
             command=self._start,
             height=44,
             font=ctk.CTkFont(size=15, weight="bold"),
+            fg_color="#3d91d5",
+            hover_color="#2878b9",
         )
-        self.btn_start.pack(side="left", expand=True, fill="x", padx=(0, 6))
+        self.btn_start.grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
         self.btn_pause = ctk.CTkButton(
             frame_btns,
@@ -205,7 +359,7 @@ class MainWindow(ctk.CTk):
             fg_color="#546e7a",
             hover_color="#37474f",
         )
-        self.btn_pause.pack(side="left", padx=(0, 6))
+        self.btn_pause.grid(row=0, column=1, padx=(0, 8))
 
         self.btn_cancel = ctk.CTkButton(
             frame_btns,
@@ -217,7 +371,7 @@ class MainWindow(ctk.CTk):
             fg_color="#e53935",
             hover_color="#b71c1c",
         )
-        self.btn_cancel.pack(side="left", padx=(0, 6))
+        self.btn_cancel.grid(row=0, column=2, padx=(0, 8))
 
         ctk.CTkButton(
             frame_btns,
@@ -227,24 +381,221 @@ class MainWindow(ctk.CTk):
             height=44,
             fg_color="#2e7d32",
             hover_color="#1b5e20",
-        ).pack(side="left")
+        ).grid(row=0, column=3)
+
+        footer = ctk.CTkFrame(main, fg_color="transparent")
+        footer.grid(row=7, column=0, sticky="ew")
+        footer.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            footer,
+            text="feito no ódio por @deimersonmoreira · instagram.com/deimersonmoreira",
+            font=ctk.CTkFont(size=11),
+            text_color=BRAND_TEXT,
+        ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkButton(
-            self,
+            footer,
             text="Copiar diagnóstico",
             command=self._copy_diagnostics,
             height=28,
             width=150,
             fg_color="#78909c",
             hover_color="#546e7a",
-        ).pack(pady=(0, 12))
+        ).grid(row=0, column=1, sticky="e")
+
+    def _refresh_upgrade_button(self):
+        if not hasattr(self, "btn_upgrade"):
+            return
+        if self.upgrading_gpu:
+            self.btn_upgrade.configure(text="Instalando Express...", state="disabled")
+            return
+        if self.device == "cuda":
+            self.btn_upgrade.configure(text="Express GPU ativo", state="disabled")
+            self.lbl_mode_hint.configure(text="Modo atual: Transcrição Express (GPU NVIDIA). As transcrições tendem a ficar mais rápidas.")
+            return
+        if self.gpu_info.get("vendor") != "nvidia":
+            self.btn_upgrade.configure(text="Express indisponível", state="disabled")
+            self.lbl_mode_hint.configure(text="Modo atual: Transcrição Rápida (CPU). Express GPU exige placa NVIDIA compatível.")
+            return
+        self.btn_upgrade.configure(text="Ativar Express GPU", state="normal")
+        self.lbl_mode_hint.configure(text="Modo atual: Transcrição Rápida (CPU). Você pode ativar Express GPU depois, se puder aguardar a instalação.")
+
+    def _upgrade_to_express(self):
+        if self.upgrading_gpu:
+            messagebox.showinfo("Upgrade em andamento", "O Express GPU já está sendo instalado.")
+            return
+        if self.running:
+            messagebox.showwarning("Aguarde", "Conclua ou cancele a transcrição atual antes de ativar o Express GPU.")
+            return
+        self.gpu_info = detect_gpu_info()
+        if self.gpu_info.get("vendor") != "nvidia":
+            messagebox.showwarning(
+                "GPU NVIDIA não detectada",
+                "O Express GPU precisa de uma placa NVIDIA compatível com CUDA.\n\nEste computador continuará usando CPU.",
+            )
+            self._refresh_upgrade_button()
+            return
+        if not PYTHONV.exists():
+            messagebox.showerror("Ambiente não encontrado", "Não encontrei o Python interno do VozaraApp para instalar o Express GPU.")
+            return
+
+        name = self.gpu_info.get("name") or "GPU NVIDIA"
+        ok = messagebox.askyesno(
+            "Ativar Transcrição Express?",
+            (
+                f"GPU detectada: {name}\n\n"
+                "O Express GPU baixa PyTorch CUDA e bibliotecas NVIDIA grandes. "
+                "Isso pode levar horas, exigir internet estável e apresentar mais erros de compatibilidade.\n\n"
+                "Se falhar, o VozaraApp continuará funcionando em CPU.\n\n"
+                "Deseja iniciar o upgrade agora?"
+            ),
+        )
+        if not ok:
+            return
+
+        self._open_upgrade_window(name)
+        self.upgrading_gpu = True
+        self.upgrade_finished = False
+        self._refresh_upgrade_button()
+        threading.Thread(target=self._upgrade_worker, daemon=True).start()
+
+    def _open_upgrade_window(self, gpu_name: str):
+        self.upgrade_window = ctk.CTkToplevel(self)
+        self.upgrade_window.title("Ativar Transcrição Express")
+        self.upgrade_window.geometry("620x460")
+        self.upgrade_window.resizable(False, False)
+        self.upgrade_window.transient(self)
+        self.upgrade_window.protocol("WM_DELETE_WINDOW", self._handle_upgrade_close)
 
         ctk.CTkLabel(
-            self,
-            text="feito no ódio por @deimersonmoreira · instagram.com/deimersonmoreira",
-            font=ctk.CTkFont(size=11),
-            text_color="#536675",
+            self.upgrade_window,
+            text="Transcrição Express (GPU NVIDIA)",
+            font=ctk.CTkFont(size=20, weight="bold"),
+        ).pack(pady=(18, 4))
+        ctk.CTkLabel(
+            self.upgrade_window,
+            text=f"GPU detectada: {gpu_name}",
+            font=ctk.CTkFont(size=12),
+            text_color=BRAND_TEXT,
         ).pack(pady=(0, 10))
+
+        alert = ctk.CTkFrame(self.upgrade_window, fg_color="#ffebee", border_color="#c62828", border_width=1, corner_radius=8)
+        alert.pack(fill="x", padx=22, pady=(0, 10))
+        ctk.CTkLabel(
+            alert,
+            text="ALERTA: esta instalação pode demorar horas e parecer parada em alguns momentos.",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#c62828",
+            wraplength=540,
+        ).pack(padx=12, pady=(10, 2))
+        ctk.CTkLabel(
+            alert,
+            text="Depois de concluída, a transcrição tende a ficar mais rápida. Se falhar, o app mantém o modo CPU.",
+            font=ctk.CTkFont(size=11),
+            text_color="#c62828",
+            wraplength=540,
+        ).pack(padx=12, pady=(0, 10))
+
+        self.upgrade_progress = ctk.CTkProgressBar(self.upgrade_window, mode="indeterminate", height=12)
+        self.upgrade_progress.pack(fill="x", padx=22, pady=(0, 10))
+        self.upgrade_progress.start()
+
+        self.upgrade_log = ctk.CTkTextbox(self.upgrade_window, height=210, font=ctk.CTkFont(family="Consolas", size=11))
+        self.upgrade_log.pack(fill="both", expand=True, padx=22, pady=(0, 12))
+        self._append_upgrade_log("Iniciando upgrade para Express GPU...")
+
+        self.upgrade_close_btn = ctk.CTkButton(
+            self.upgrade_window,
+            text="Instalando...",
+            state="disabled",
+            command=self.upgrade_window.destroy,
+            height=34,
+        )
+        self.upgrade_close_btn.pack(pady=(0, 14))
+
+    def _handle_upgrade_close(self):
+        if self.upgrading_gpu and not self.upgrade_finished:
+            messagebox.showwarning(
+                "Instalação em andamento",
+                "Aguarde o upgrade Express terminar. Fechar a janela agora pode deixar a instalação incompleta.",
+            )
+            return
+        if self.upgrade_window and self.upgrade_window.winfo_exists():
+            self.upgrade_window.destroy()
+
+    def _append_upgrade_log(self, text: str):
+        line = _clean_output_line(text)
+        if not line:
+            return
+
+        def write():
+            if not self.upgrade_log or not self.upgrade_log.winfo_exists():
+                return
+            self.upgrade_log.insert("end", line + "\n")
+            self.upgrade_log.see("end")
+
+        self.after(0, write)
+
+    def _finish_upgrade(self, ok: bool, message: str):
+        def update():
+            self.upgrading_gpu = False
+            self.upgrade_finished = True
+            if self.upgrade_progress and self.upgrade_progress.winfo_exists():
+                self.upgrade_progress.stop()
+            self._append_upgrade_log(message)
+            if self.upgrade_close_btn and self.upgrade_close_btn.winfo_exists():
+                self.upgrade_close_btn.configure(text="Fechar", state="normal")
+            self.lbl_status.configure(text=message)
+            if ok:
+                self.config_data["preferred_mode"] = "gpu"
+                _save_config(self.config_data)
+                messagebox.showinfo("Express GPU ativado", "Transcrição Express ativada. As próximas transcrições tentarão usar GPU.")
+            else:
+                self.config_data["preferred_mode"] = "cpu"
+                _save_config(self.config_data)
+                messagebox.showwarning("Express GPU não ativado", f"{message}\n\nO VozaraApp continuará funcionando em CPU.")
+            self._detect_device_async()
+            self._refresh_upgrade_button()
+
+        self.after(0, update)
+
+    def _upgrade_worker(self):
+        def run_step(label: str, cmd: list[str], attempts: int = 3) -> bool:
+            for attempt in range(1, attempts + 1):
+                self._append_upgrade_log(f"{label} · tentativa {attempt}/{attempts}")
+                ok, _ = _run_stream(cmd, on_output=self._append_upgrade_log)
+                if ok:
+                    return True
+                self._append_upgrade_log(f"{label} falhou. Tentando novamente...")
+            return False
+
+        if not REQUIREMENTS_GPU.exists() or not REQUIREMENTS_NVIDIA.exists():
+            self._finish_upgrade(False, "Arquivos de dependências GPU não foram encontrados no pacote instalado.")
+            return
+
+        self._append_upgrade_log("Verificando se CUDA já está disponível...")
+        ok, output = _run_stream(_cuda_validation_cmd(), on_output=self._append_upgrade_log)
+        if ok and _output_has_cuda(output):
+            self._finish_upgrade(True, "Transcrição Express já estava disponível e foi ativada.")
+            return
+
+        pip_base = [str(PYTHONV), "-m", "pip", "install"]
+        if not run_step("Instalando PyTorch CUDA", pip_base + ["--upgrade", "-r", str(REQUIREMENTS_GPU), "--progress-bar", "raw"]):
+            self._finish_upgrade(False, "Falha ao instalar PyTorch CUDA. Verifique internet, espaço em disco e antivírus.")
+            return
+
+        if not run_step("Instalando bibliotecas NVIDIA", pip_base + ["--upgrade", "-r", str(REQUIREMENTS_NVIDIA), "--progress-bar", "raw"]):
+            self._finish_upgrade(False, "Falha ao instalar bibliotecas NVIDIA. O modo CPU foi mantido.")
+            return
+
+        self._append_upgrade_log("Validando CUDA...")
+        ok, output = _run_stream(_cuda_validation_cmd(), on_output=self._append_upgrade_log)
+        if not ok or not _output_has_cuda(output):
+            self._finish_upgrade(False, "Dependências instaladas, mas CUDA não ficou disponível. Atualize o driver NVIDIA ou continue em CPU.")
+            return
+
+        self._finish_upgrade(True, "Transcrição Express ativada com sucesso.")
 
     def _adicionar_arquivos(self):
         if self.running:
@@ -510,6 +861,7 @@ class MainWindow(ctk.CTk):
                 kind = msg[0]
                 if kind == "device":
                     self.lbl_device.configure(text=msg[1], text_color=msg[2])
+                    self._refresh_upgrade_button()
                 elif kind == "duration":
                     _, key, duration, estimate = msg
                     self.file_meta.setdefault(key, {})["duration"] = duration

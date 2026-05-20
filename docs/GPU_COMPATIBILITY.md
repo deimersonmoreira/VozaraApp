@@ -20,11 +20,21 @@ O app tenta reconhecer as seguintes familias como NVIDIA/CUDA:
 
 | VRAM | Decisao do app |
 | --- | --- |
-| 4 GB ou mais | Recomenda GPU |
+| 4 GB ou mais | Permite GPU, mas CPU segue como recomendacao inicial |
 | Desconhecida | Permite GPU |
 | Menos de 4 GB | Recomenda CPU, mas permite tentar GPU |
 
 Placas MX costumam ter 2 GB de VRAM. Elas podem ser detectadas, mas o Whisper medium pode falhar por falta de memoria. Nesse caso, use CPU.
+
+## Tempo de instalacao do modo GPU
+
+O modo CPU e o recomendado para a maioria dos usuarios: instala mais rapido, tem menos chance de erro e funciona em mais computadores.
+
+O modo GPU e opcional. Ele funciona como uma Transcricao Express depois de configurado, mas a primeira instalacao baixa PyTorch CUDA e bibliotecas NVIDIA grandes. Em conexoes lentas, computadores com disco lento ou antivirus ativo, essa etapa pode levar horas, parecer parada e apresentar mais erros de compatibilidade.
+
+Oriente o usuario a escolher GPU apenas quando puder esperar. Se a prioridade for instalar rapido e testar o app sem risco, use CPU. Depois de instalado, o modo GPU nao precisa baixar esses pacotes novamente e a transcricao tende a ser bem mais rapida.
+
+O usuario tambem pode instalar primeiro em CPU e ativar o Express GPU depois pela tela principal do app. Esse upgrade instala as dependencias CUDA/NVIDIA, valida `torch.cuda.is_available()` e so muda a configuracao para GPU se a validacao passar. Se falhar, o modo CPU permanece ativo.
 
 ## Dependencias baixadas na primeira configuracao
 
@@ -37,9 +47,7 @@ Na primeira configuracao, o app baixa:
 
 Isso reduz o que precisa estar pre-instalado no computador, mas exige internet na primeira configuracao.
 
-## Instalador atual vs instalador online
+## Instalador atual
 
-- `build.iss`: instalador mais robusto, inclui Python interno e FFmpeg.
-- `build-online.iss`: variante experimental menor; inclui o instalador do Python e FFmpeg, mas nao inclui o Python expandido.
-
-Use `build.iss` para releases publicas ate a variante online ser testada em Windows limpo.
+- `build.iss`: instalador oficial, inclui Python interno e FFmpeg.
+- O instalador online experimental foi removido por enquanto para evitar confusao e builds inconsistentes.

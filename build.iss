@@ -3,7 +3,7 @@
 ; powershell -ExecutionPolicy Bypass -File scripts\prepare_distribution.ps1
 
 #define AppName       "VozaraApp"
-#define AppVersion    "1.1.0"
+#define AppVersion    "0.0.4"
 #define AppDir        "VozaraApp"
 
 [Setup]
@@ -41,6 +41,7 @@ Source: "launcher.bat";             DestDir: "{app}"; Flags: ignoreversion
 Source: "launcher.vbs";             DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";                DestDir: "{app}"; Flags: ignoreversion
 Source: "BRANDING.md";              DestDir: "{app}"; Flags: ignoreversion
+Source: "docs\*.md";                DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "assets\*.svg";             DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "assets\*.ico";             DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "requirements-base.txt";    DestDir: "{app}"; Flags: ignoreversion
@@ -49,7 +50,7 @@ Source: "requirements-gpu.txt";     DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements-nvidia.txt";  DestDir: "{app}"; Flags: ignoreversion
 Source: "vendor\ffmpeg\bin\ffmpeg.exe";  DestDir: "{app}\vendor\ffmpeg\bin"; Flags: ignoreversion
 Source: "vendor\ffmpeg\bin\ffprobe.exe"; DestDir: "{app}\vendor\ffmpeg\bin"; Flags: ignoreversion
-Source: "vendor\runtime\python\*"; DestDir: "{app}\runtime\python"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "runtime\python\*"; DestDir: "{app}\runtime\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}";       Filename: "{sys}\wscript.exe"; Parameters: """{app}\launcher.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\icon.ico"

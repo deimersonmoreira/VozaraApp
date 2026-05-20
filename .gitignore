@@ -18,11 +18,14 @@ config.json
 
 # Heavy distribution artifacts
 vendor/
+runtime/
 *.exe
 *.msi
 *.zip
 *.7z
 *.rar
+unins*.dat
+unins*.exe
 
 # Installer output and local tools
 Output/
@@ -32,6 +35,7 @@ innosetup-*.exe
 .vscode/
 .idea/
 .claude/
+.git.broken-*/
 
 # OS
 Thumbs.db
