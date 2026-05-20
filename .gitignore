@@ -20,6 +20,7 @@ config.json
 vendor/
 runtime/
 *.exe
+!Instalar*.exe
 *.msi
 *.zip
 *.7z
